@@ -217,12 +217,12 @@ export default function Analytics() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+          <div className="flex flex-col gap-3 lg:flex-row lg:justify-between lg:items-center mb-6 md:mb-8">
             <div>
-              <h1 className="text-4xl font-bold text-slate-900 mb-2">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-1 md:mb-2">
                 Business Analytics
               </h1>
-              <p className="text-slate-600 text-lg">
+              <p className="text-slate-600 text-sm sm:text-base md:text-lg">
                 Deep insights into your business performance
               </p>
             </div>

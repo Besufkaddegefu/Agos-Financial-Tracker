@@ -41,9 +41,17 @@
     "clean": "rimraf dist node_modules/.vite",
     "clean:all": "rimraf dist node_modules",
     "clean:build": "rimraf dist",
-    "serve": "npm run build && npm run preview"
+    "serve": "npm run build && npm run preview",
+    "dev:api": "node scripts/dev-api.mjs",
+    "db:migrate": "node scripts/run-migrations.mjs",
+    "db:seed": "node scripts/seed-core-data.mjs",
+    "db:seed:hr-demo": "node scripts/seed-hr-demo.mjs",
+    "db:seed:wipe": "node scripts/seed-core-data.mjs --wipe"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.31.0",
+    "@clerk/clerk-sdk-node": "^5.1.6",
+    "@neondatabase/serverless": "^1.0.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
     "date-fns": "^2.30.0",
@@ -55,6 +63,7 @@
     "react-router-dom": "^6.15.0",
     "recharts": "^2.8.0",
     "tailwind-merge": "^1.14.0",
+    "ws": "^8.22.2",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
