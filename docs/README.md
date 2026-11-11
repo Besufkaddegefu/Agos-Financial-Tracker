@@ -3,7 +3,7 @@
 This directory contains the marketing website for BizGrow, hosted on GitHub Pages.
 
 ## 🌐 Live Website
-Visit: [https://kenthic.github.io/biz-grow/](https://kenthic.github.io/biz-grow/)
+
 
 ## 📁 Structure
 

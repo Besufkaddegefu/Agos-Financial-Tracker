@@ -62,19 +62,19 @@ export default function Dashboard() {
     try {
       // Check if this is a first-time user
       const userSettings = dataStore.getUserSettings();
-      const hasData =
-        dataStore.customers.length > 0 ||
-        dataStore.revenues.length > 0 ||
-        dataStore.expenses.length > 0;
-
-      setIsFirstTime(!hasData && userSettings.showSampleData !== false);
-      setShowWelcome(!hasData && userSettings.showSampleData !== false);
 
       const [revenueData, expenseData, customerData] = await Promise.all([
         Revenue.list('-date'),
         Expense.list('-date'),
         Customer.list('-acquisition_date'),
       ]);
+
+      const hasData =
+        (customerData?.length || 0) > 0 ||
+        (revenueData?.length || 0) > 0 ||
+        (expenseData?.length || 0) > 0;
+      setIsFirstTime(!hasData && userSettings.showSampleData !== false);
+      setShowWelcome(!hasData && userSettings.showSampleData !== false);
 
       setRevenues(revenueData);
       setExpenses(expenseData);
@@ -197,20 +197,20 @@ export default function Dashboard() {
 
   if (isLoading) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 md:p-8">
         <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse space-y-8">
-            <div className="h-8 bg-slate-200 rounded w-64"></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="animate-pulse space-y-6 md:space-y-8">
+            <div className="h-8 bg-slate-200 rounded w-48 sm:w-64"></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               {Array(4)
                 .fill(0)
                 .map((_, i) => (
-                  <div key={i} className="h-32 bg-slate-200 rounded-2xl"></div>
+                  <div key={i} className="h-28 sm:h-32 bg-slate-200 rounded-2xl"></div>
                 ))}
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="h-96 bg-slate-200 rounded-2xl"></div>
-              <div className="h-96 bg-slate-200 rounded-2xl"></div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
+              <div className="h-72 sm:h-96 bg-slate-200 rounded-2xl"></div>
+              <div className="h-72 sm:h-96 bg-slate-200 rounded-2xl"></div>
             </div>
           </div>
         </div>
@@ -219,31 +219,31 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-2">
+    <div className="p-4 sm:p-6 md:p-8">
+      <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-1 md:mb-2">
               Business Dashboard
             </h1>
-            <p className="text-slate-600 text-lg">
+            <p className="text-slate-600 text-sm sm:text-base md:text-lg">
               Track your business performance and growth
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <button
               onClick={() => setShowDataManager(true)}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              className="flex items-center justify-center gap-2 bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm touch-manipulation"
             >
-              <Database className="w-4 h-4" />
-              Manage Data
+              <Database className="w-4 h-4 shrink-0" />
+              <span>Manage Data</span>
             </button>
 
             {/* Test Suite Button - Only in Development Mode */}
             {process.env.NODE_ENV === 'development' && (
               <button
                 onClick={toggleTestRunner}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium ${
+                className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-colors font-medium text-sm touch-manipulation ${
                   showTestRunner
                     ? 'bg-green-700 text-white'
                     : 'bg-green-600 text-white hover:bg-green-700'
@@ -281,7 +281,7 @@ export default function Dashboard() {
                     supports JSON, CSV, and Excel files to help you track
                     revenue, expenses, and customers.
                   </p>
-                  <div className="flex gap-3">
+                  <div className="flex flex-wrap gap-2 sm:gap-3">
                     <button
                       onClick={() => setShowDataManager(true)}
                       className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"

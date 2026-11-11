@@ -1,5 +1,12 @@
 export function createPageUrl(pageName) {
-  return `/${pageName.toLowerCase()}`;
+  const map = {
+    Dashboard: '/dashboard',
+    Analytics: '/analytics',
+    Customers: '/customers',
+    Reports: '/reports',
+    HRPayroll: '/hr-payroll',
+  };
+  return map[pageName] || `/${String(pageName).toLowerCase()}`;
 }
 
 export function cn(...classes) {
