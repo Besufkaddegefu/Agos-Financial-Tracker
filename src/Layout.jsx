@@ -1,12 +1,14 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { UserButton } from '@clerk/clerk-react';
 import { createPageUrl } from '@/utils';
 import {
   BarChart3,
   TrendingUp,
   Users,
   FileSpreadsheet,
-  Settings,
+  Briefcase,
+  ClipboardList,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -18,35 +20,30 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
+  SidebarFooter,
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
+import { useRBAC } from '@/hooks/useRBAC';
+import { ROLE_LABELS } from '@/lib/rbac';
 
-const navigationItems = [
-  {
-    title: 'Dashboard',
-    url: createPageUrl('Dashboard'),
-    icon: BarChart3,
-  },
-  {
-    title: 'Analytics',
-    url: createPageUrl('Analytics'),
-    icon: TrendingUp,
-  },
-  {
-    title: 'Customers',
-    url: createPageUrl('Customers'),
-    icon: Users,
-  },
-  {
-    title: 'Reports',
-    url: createPageUrl('Reports'),
-    icon: FileSpreadsheet,
-  },
+const clerkConfigured = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
+
+const baseNavigationItems = [
+  { title: 'Dashboard', url: createPageUrl('Dashboard'), icon: BarChart3, minRole: null },
+  { title: 'Analytics', url: createPageUrl('Analytics'), icon: TrendingUp, minRole: null },
+  { title: 'Customers', url: createPageUrl('Customers'), icon: Users, minRole: null },
+  { title: 'HR & Staff', url: '/hr-payroll', icon: Briefcase, minRole: 'admin' },
+  { title: 'Reports', url: createPageUrl('Reports'), icon: FileSpreadsheet, minRole: 'employee' },
+  { title: 'My Requests', url: '/my-requests', icon: ClipboardList, minRole: 'employee' },
 ];
 
 export default function Layout({ children, currentPageName }) {
   const location = useLocation();
+  const { role, hasRole, clerkConfigured: authEnabled } = useRBAC();
+  const navigationItems = baseNavigationItems.filter(
+    item => !item.minRole || !authEnabled || hasRole(item.minRole)
+  );
 
   return (
     <SidebarProvider>
@@ -70,7 +67,7 @@ export default function Layout({ children, currentPageName }) {
           }
         `}
       </style>
-      <div className="min-h-screen flex w-full bg-slate-50">
+      <div className="min-h-screen flex w-full min-w-0 bg-slate-50">
         <Sidebar className="border-r border-slate-200/60 bg-white/80 backdrop-blur-sm">
           <SidebarHeader className="border-b border-slate-200/60 p-6">
             <div className="flex items-center gap-3">
@@ -116,17 +113,32 @@ export default function Layout({ children, currentPageName }) {
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
+          <SidebarFooter className="border-t border-slate-200/60 p-4">
+            {clerkConfigured ? (
+              <div className="flex items-center gap-3">
+                <UserButton afterSignOutUrl="/sign-in" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 truncate">Account</p>
+                  <p className="text-xs text-slate-500">{role ? (ROLE_LABELS[role] || role) : 'Signed in'}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-slate-500">
+                Local mode{role ? ` (${ROLE_LABELS[role] || role})` : ''}
+              </div>
+            )}
+          </SidebarFooter>
         </Sidebar>
 
-        <main className="flex-1 flex flex-col">
-          <header className="bg-white/90 backdrop-blur-sm border-b border-slate-200/60 px-6 py-4 md:hidden">
-            <div className="flex items-center gap-4">
-              <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-lg transition-colors duration-200" />
-              <h1 className="text-xl font-bold text-slate-900">Business Hub</h1>
+        <main className="flex-1 flex flex-col min-w-0">
+          <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-slate-200/60 px-4 py-3 md:hidden">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="hover:bg-slate-100 p-2 -ml-1 rounded-lg transition-colors duration-200" />
+              <h1 className="text-lg font-bold text-slate-900 truncate">Business Hub</h1>
             </div>
           </header>
 
-          <div className="flex-1 overflow-auto bg-gradient-to-br from-slate-50 to-slate-100/50">
+          <div className="flex-1 overflow-auto overflow-x-hidden bg-gradient-to-br from-slate-50 to-slate-100/50">
             {children}
           </div>
         </main>

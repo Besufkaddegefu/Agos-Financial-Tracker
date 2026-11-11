@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Customer } from '@/entities/all';
 import {
   Users,
@@ -16,13 +16,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import { useToast } from '@/components/ui/toast';
 import ConfirmationModal from '@/components/ui/confirmation-modal';
+import Pagination from '@/components/ui/pagination';
+import { useRBAC } from '@/hooks/useRBAC';
+import { displayName } from '@/lib/displayName';
 
 export default function Customers() {
   const { toast } = useToast();
+  const { role } = useRBAC();
+  const isEmployee = role === 'employee';
   const [customers, setCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
+  const [filters, setFilters] = useState({ q: '', status: '', company: '', acquired_from: '', acquired_to: '', sort: 'newest' });
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -33,6 +41,10 @@ export default function Customers() {
     acquisition_date: format(new Date(), 'yyyy-MM-dd'),
   });
   const [formErrors, setFormErrors] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const saveLock = useRef(false);
+  const deleteLock = useRef(false);
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     customerId: null,
@@ -90,6 +102,7 @@ export default function Customers() {
 
   const handleSubmit = async e => {
     e.preventDefault();
+    if (saveLock.current) return;
 
     console.log('Form submission started');
     console.log('Editing customer:', editingCustomer);
@@ -130,6 +143,8 @@ export default function Customers() {
       );
     }
 
+    saveLock.current = true;
+    setIsSaving(true);
     try {
       // Ensure numeric values are properly converted
       const customerData = {
@@ -153,10 +168,8 @@ export default function Customers() {
 
       await loadCustomers();
       resetForm();
-
-      // Show success message
       const action = editingCustomer ? 'updated' : 'created';
-      console.log(`Customer ${action} successfully!`);
+      toast.success(`Customer ${action} successfully.`);
     } catch (error) {
       console.error('Error saving customer:', error);
       if (error.message.includes('already exists')) {
@@ -164,6 +177,9 @@ export default function Customers() {
       } else {
         toast.error(`Error saving customer: ${error.message}`);
       }
+    } finally {
+      saveLock.current = false;
+      setIsSaving(false);
     }
   };
 
@@ -189,13 +205,21 @@ export default function Customers() {
   };
 
   const confirmDelete = async () => {
+    if (deleteLock.current) return;
+    deleteLock.current = true;
+    setIsDeleting(true);
     try {
-      await Customer.delete(confirmModal.customerId);
+      const result = await Customer.delete(confirmModal.customerId);
       await loadCustomers();
-      toast.success('Customer deleted successfully!');
+      toast.success(result?.pendingApproval
+        ? 'Customer deletion sent for approval. The customer is still in your list until it is approved.'
+        : 'Customer deleted successfully!');
     } catch (error) {
       console.error('Error deleting customer:', error);
       toast.error(`Error deleting customer: ${error.message}`);
+    } finally {
+      deleteLock.current = false;
+      setIsDeleting(false);
     }
   };
 
@@ -231,6 +255,40 @@ export default function Customers() {
     }
   };
 
+  const filteredCustomers = React.useMemo(() => {
+    const q = filters.q.trim().toLowerCase();
+    let items = customers.filter(customer => customer && customer.id);
+    if (filters.status) items = items.filter(c => c.status === filters.status);
+    if (filters.company) items = items.filter(c => String(c.company || '').toLowerCase().includes(filters.company.trim().toLowerCase()));
+    if (filters.acquired_from) items = items.filter(c => c.acquisition_date && String(c.acquisition_date) >= filters.acquired_from);
+    if (filters.acquired_to) items = items.filter(c => c.acquisition_date && String(c.acquisition_date) <= filters.acquired_to);
+    if (q) {
+      items = items.filter(c =>
+        [c.name, c.email, c.phone, c.company, c.status].some(v => String(v || '').toLowerCase().includes(q))
+      );
+    }
+    items = [...items].sort((a, b) => {
+      switch (filters.sort) {
+        case 'name_asc': return String(a.name || '').localeCompare(String(b.name || ''));
+        case 'name_desc': return String(b.name || '').localeCompare(String(a.name || ''));
+        case 'value_desc': return (Number(b.total_value) || 0) - (Number(a.total_value) || 0);
+        case 'value_asc': return (Number(a.total_value) || 0) - (Number(b.total_value) || 0);
+        case 'oldest': return String(a.acquisition_date || '').localeCompare(String(b.acquisition_date || ''));
+        case 'newest':
+        default: return String(b.acquisition_date || '').localeCompare(String(a.acquisition_date || ''));
+      }
+    });
+    return items;
+  }, [customers, filters]);
+
+  useEffect(() => { setPage(1); }, [filters, customers.length]);
+  const pagedCustomers = React.useMemo(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * pageSize;
+    return { items: filteredCustomers.slice(start, start + pageSize), page: safePage, totalPages, total: filteredCustomers.length, start: filteredCustomers.length ? start + 1 : 0, end: Math.min(start + pageSize, filteredCustomers.length) };
+  }, [filteredCustomers, page]);
+
   if (isLoading) {
     return (
       <div className="p-8">
@@ -258,12 +316,12 @@ export default function Customers() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start md:items-center mb-6 md:mb-8">
             <div>
-              <h1 className="text-4xl font-bold text-slate-900 mb-2">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-1 md:mb-2">
                 Customer Management
               </h1>
-              <p className="text-slate-600 text-lg">
+              <p className="text-slate-600 text-sm sm:text-base md:text-lg">
                 Manage your customer relationships and data
               </p>
             </div>
@@ -277,19 +335,61 @@ export default function Customers() {
           </div>
         </motion.div>
 
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+          <CardContent className="p-4 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+              <label className="block lg:col-span-2">
+                <span className="text-xs font-medium text-slate-600">Search clients</span>
+                <input value={filters.q} onChange={e => setFilters(f => ({ ...f, q: e.target.value }))} className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Name, email, phone, company..." />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">Status</span>
+                <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))} className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">All statuses</option><option value="active">Active</option><option value="potential">Potential</option><option value="inactive">Inactive</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">Company</span>
+                <input value={filters.company} onChange={e => setFilters(f => ({ ...f, company: e.target.value }))} className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Company contains..." />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">Acquired from</span>
+                <input type="date" value={filters.acquired_from} onChange={e => setFilters(f => ({ ...f, acquired_from: e.target.value }))} className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">Acquired to</span>
+                <input type="date" value={filters.acquired_to} onChange={e => setFilters(f => ({ ...f, acquired_to: e.target.value }))} className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </label>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-600">Sort</span>
+                <select value={filters.sort} onChange={e => setFilters(f => ({ ...f, sort: e.target.value }))} className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="newest">Newest acquired</option><option value="oldest">Oldest acquired</option><option value="name_asc">Name A–Z</option><option value="name_desc">Name Z–A</option><option value="value_desc">Highest value</option><option value="value_asc">Lowest value</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-slate-600">Showing <span className="font-semibold text-slate-900">{pagedCustomers.start}–{pagedCustomers.end}</span> of {filteredCustomers.length} filtered ({customers.length} total)</span>
+                <button type="button" onClick={() => setFilters({ q: '', status: '', company: '', acquired_from: '', acquired_to: '', sort: 'newest' })} className="text-blue-600 hover:text-blue-700 font-medium">Clear filters</button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Customer Form Modal */}
         {showForm && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+            onClick={e => e.target === e.currentTarget && resetForm()}
           >
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-md"
+              initial={{ scale: 0.98, opacity: 0, y: 12 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              className="bg-white w-full max-w-md max-h-[92vh] sm:max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 shadow-xl"
             >
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4">
                 {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
               </h2>
 
@@ -453,19 +553,21 @@ export default function Customers() {
                   />
                 </div>
 
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium"
-                  >
-                    {editingCustomer ? 'Update' : 'Create'} Customer
-                  </button>
+                <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4 sticky bottom-0 bg-white pb-1">
                   <button
                     type="button"
                     onClick={resetForm}
-                    className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200 font-medium"
+                    disabled={isSaving}
+                    className="flex-1 bg-slate-200 text-slate-700 py-2.5 rounded-lg hover:bg-slate-300 transition-colors duration-200 font-medium"
                   >
                     Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium disabled:opacity-60"
+                  >
+                    {isSaving ? 'Saving...' : `${editingCustomer ? 'Update' : 'Create'} Customer`}
                   </button>
                 </div>
               </form>
@@ -475,9 +577,7 @@ export default function Customers() {
 
         {/* Customer Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {customers
-            .filter(customer => customer && customer.id)
-            .map((customer, index) => (
+          {pagedCustomers.items.map((customer, index) => (
               <motion.div
                 key={`customer-${customer.id}`}
                 initial={{ opacity: 0, y: 20 }}
@@ -504,14 +604,18 @@ export default function Customers() {
                         </div>
                       </div>
                       <div className="flex gap-1">
-                        <button
-                          onClick={() => handleEdit(customer)}
-                          className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
+                        {!isEmployee && (
+                          <button
+                            onClick={() => handleEdit(customer)}
+                            aria-label="Edit customer"
+                            className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDelete(customer.id)}
+                          aria-label={isEmployee ? 'Request customer deletion' : 'Delete customer'}
                           className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -563,43 +667,47 @@ export default function Customers() {
                         {customer.total_value?.toLocaleString() || '0'}
                       </span>
                     </div>
+                    <p className="text-xs text-slate-500">
+                      Added by: {displayName(customer.created_by_name, 'Unknown (before tracking)')}
+                    </p>
                   </CardContent>
                 </Card>
               </motion.div>
             ))}
         </div>
 
-        {customers.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-12"
-          >
+        <Pagination {...pagedCustomers} pageSize={pageSize} onPage={setPage} />
+
+        {filteredCustomers.length === 0 && customers.length > 0 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
             <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-slate-900 mb-2">
-              No customers yet
-            </h3>
-            <p className="text-slate-600 mb-6">
-              Get started by adding your first customer
-            </p>
-            <button
-              onClick={() => setShowForm(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium"
-            >
+            <h3 className="text-xl font-semibold text-slate-900 mb-2">No matching clients</h3>
+            <p className="text-slate-600 mb-4">Try adjusting your filters.</p>
+            <button type="button" onClick={() => setFilters({ q: '', status: '', company: '', acquired_from: '', acquired_to: '', sort: 'newest' })} className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium">Clear filters</button>
+          </motion.div>
+        )}
+
+        {customers.length === 0 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
+            <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-slate-900 mb-2">No customers yet</h3>
+            <p className="text-slate-600 mb-6">Get started by adding your first customer</p>
+            <button onClick={() => setShowForm(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium">
               <Plus className="w-4 h-4" />
               Add Your First Customer
             </button>
           </motion.div>
         )}
 
-        {/* Confirmation Modal */}
         <ConfirmationModal
           isOpen={confirmModal.isOpen}
           onClose={closeConfirmModal}
           onConfirm={confirmDelete}
-          title="Delete Customer"
-          message="Are you sure you want to delete this customer? This action cannot be undone."
-          confirmText="Delete"
+          title={isEmployee ? 'Request customer deletion' : 'Delete Customer'}
+          message={isEmployee
+            ? 'Send this customer deletion to an administrator for review? The customer will remain until it is approved.'
+            : 'Are you sure you want to delete this customer? This action cannot be undone.'}
+          confirmText={isDeleting ? 'Sending...' : isEmployee ? 'Send for approval' : 'Delete'}
           variant="danger"
         />
       </div>
